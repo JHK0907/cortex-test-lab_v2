@@ -1,0 +1,29 @@
+# Cortex Code Security SCA 테스트용
+# VULNERABLE: CVE가 알려진 구버전 패키지 의도적 포함
+
+# Web framework
+fastapi==0.95.2
+uvicorn==0.22.0
+
+# Database
+sqlalchemy==1.4.46
+pymysql==1.0.3
+
+# Auth
+python-jose==3.3.0          # CVE-2024-33663 — 취약 버전 (Code Security 탐지 대상)
+passlib==1.7.4
+python-multipart==0.0.6
+
+# HTTP
+requests==2.28.0             # 구버전 (취약점 포함 가능)
+urllib3==1.26.14             # CVE-2023-43804 — 취약 버전
+
+# AWS
+boto3==1.26.0
+botocore==1.29.0
+
+# Utilities
+pydantic==1.10.7
+cryptography==38.0.4         # CVE-2023-0286 — 취약 버전 (Code Security 탐지 대상)
+PyJWT==2.4.0                 # 구버전
+Pillow==9.3.0                # CVE-2023-44271 — 취약 버전
