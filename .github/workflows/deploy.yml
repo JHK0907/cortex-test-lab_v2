@@ -108,7 +108,7 @@ jobs:
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: ${{ secrets.EC2_HOST }}
+          host: 43.203.59.65
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
           timeout: 60s
@@ -131,11 +131,11 @@ jobs:
 
             # 환경변수 파일 생성
             cat > /home/ubuntu/app/.env << 'ENV'
-            DB_HOST=${{ secrets.DB_HOST }}
-            DB_USER=${{ secrets.DB_USER }}
+            DB_HOST=cortex-test-mysql.cx8ey4wgqdia.ap-northeast-2.rds.amazonaws.com
+            DB_USER=admin
             DB_PASSWORD=${{ secrets.DB_PASSWORD }}
             DB_NAME=testdb
-            SECRET_KEY=${{ secrets.APP_SECRET_KEY }}
+            SECRET_KEY=mysecretkey123
             ENV
 
             # 기존 프로세스 종료 후 재시작
@@ -155,7 +155,7 @@ jobs:
       - name: Configure Nginx
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: ${{ secrets.EC2_HOST }}
+          host: 43.203.59.65
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
@@ -193,7 +193,7 @@ jobs:
 
       - name: Health check
         run: |
-          EC2_HOST="${{ secrets.EC2_HOST }}"
+          EC2_HOST="43.203.59.65"
           RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://${EC2_HOST}/health || echo "000")
 
           if [ "$RESPONSE" = "200" ]; then
@@ -204,7 +204,7 @@ jobs:
 
       - name: Verify vulnerable endpoints exist
         run: |
-          EC2_HOST="${{ secrets.EC2_HOST }}"
+          EC2_HOST="43.203.59.65"
           echo "📋 ASPM 테스트 엔드포인트 확인:"
           for endpoint in "/" "/health" "/admin" "/docs"; do
             CODE=$(curl -s -o /dev/null -w "%{http_code}" http://${EC2_HOST}${endpoint} || echo "000")
