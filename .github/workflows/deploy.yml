@@ -26,29 +26,38 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Download and Setup Cortex CLI
+      - name: Install dependencies and Cortex CLI
         run: |
-          # Cortex CLI 다운로드 (Linux amd64)
-          # Note: 실제 URL은 테넌트 환경에 따라 다를 수 있으나, 표준 API 엔드포인트를 사용합니다.
-          curl -L "${{ env.CORTEX_API_BASE_URL }}/public_api/v1/unified-cli/releases/download-link?os=linux&architecture=amd64" \
-          -H "x-xdr-auth-id: ${{ env.CORTEX_API_KEY_ID }}" \
-          -o cortexcli.tar.gz
-          tar -xzf cortexcli.tar.gz
-          chmod +x ./cortexcli
+          # 필수 라이브러리 설치
+          sudo apt-get update && sudo apt-get install -y libhyperscan5
 
-      - name: Run Cortex Code Scan
-        run: |
-          ./cortexcli --api-base-url ${{ env.CORTEX_API_BASE_URL }} \
-                      --api-key ${{ env.CORTEX_API_KEY }} \
-                      --api-key-id ${{ env.CORTEX_API_KEY_ID }} \
-                      code scan --directory . --upload-mode upload --soft-fail true
+          # Homebrew를 통한 Cortex CLI 설치 (권장 방식)
+          /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+          (echo; echo 'eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"') >> /home/runner/.bashrc
+          eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+          brew tap paloaltonetworks/cortexcli
+          brew install cortexcli
 
-      - name: Run Cortex IaC Scan (Terraform)
+      - name: Run Cortex Security Scans
         run: |
-          ./cortexcli --api-base-url ${{ env.CORTEX_API_BASE_URL }} \
-                      --api-key ${{ env.CORTEX_API_KEY }} \
-                      --api-key-id ${{ env.CORTEX_API_KEY_ID }} \
-                      iac scan --directory terraform/ --upload-mode upload --soft-fail true
+          eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+          
+          # 환경 변수 설정
+          export CORTEX_API_KEY_ID="${{ secrets.CORTEX_API_KEY_ID }}"
+          export CORTEX_API_KEY="${{ secrets.CORTEX_API_KEY }}"
+          export CORTEX_TENANT_URL="${{ secrets.CORTEX_API_BASE_URL }}"
+
+          # Repo ID 설정 (예: owner/repo)
+          REPO_ID="${{ github.repository }}"
+
+          echo "🚀 Running Cortex Code Scan..."
+          cortexcli code scan --directory . --repo-id "$REPO_ID" --upload-mode upload --soft-fail true
+
+          echo "🚀 Running Cortex IaC Scan..."
+          cortexcli iac scan --directory terraform/ --repo-id "$REPO_ID" --upload-mode upload --soft-fail true
+
+          echo "🚀 Running Cortex Secrets Scan..."
+          cortexcli secrets scan --directory . --repo-id "$REPO_ID" --upload-mode upload --soft-fail true
 
   # ────────────────────────────────────────
   # Job 2: 앱 빌드 및 테스트
