@@ -42,22 +42,26 @@ jobs:
         run: |
           eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
           
-          # 환경 변수 설정
-          export CORTEX_API_KEY_ID="${{ secrets.CORTEX_API_KEY_ID }}"
-          export CORTEX_API_KEY="${{ secrets.CORTEX_API_KEY }}"
-          export CORTEX_TENANT_URL="${{ secrets.CORTEX_API_BASE_URL }}"
-
           # Repo ID 설정 (예: owner/repo)
           REPO_ID="${{ github.repository }}"
 
           echo "🚀 Running Cortex Code Scan..."
-          cortexcli code scan --directory . --repo-id "$REPO_ID" --upload-mode upload --soft-fail true
+          cortexcli --api-key "${{ secrets.CORTEX_API_KEY }}" \
+                    --api-key-id "${{ secrets.CORTEX_API_KEY_ID }}" \
+                    --api-base-url "${{ secrets.CORTEX_API_BASE_URL }}" \
+                    code scan --directory . --repo-id "$REPO_ID" --upload-mode upload --soft-fail true
 
           echo "🚀 Running Cortex IaC Scan..."
-          cortexcli iac scan --directory terraform/ --repo-id "$REPO_ID" --upload-mode upload --soft-fail true
+          cortexcli --api-key "${{ secrets.CORTEX_API_KEY }}" \
+                    --api-key-id "${{ secrets.CORTEX_API_KEY_ID }}" \
+                    --api-base-url "${{ secrets.CORTEX_API_BASE_URL }}" \
+                    iac scan --directory terraform/ --repo-id "$REPO_ID" --upload-mode upload --soft-fail true
 
           echo "🚀 Running Cortex Secrets Scan..."
-          cortexcli secrets scan --directory . --repo-id "$REPO_ID" --upload-mode upload --soft-fail true
+          cortexcli --api-key "${{ secrets.CORTEX_API_KEY }}" \
+                    --api-key-id "${{ secrets.CORTEX_API_KEY_ID }}" \
+                    --api-base-url "${{ secrets.CORTEX_API_BASE_URL }}" \
+                    secrets scan --directory . --repo-id "$REPO_ID" --upload-mode upload --soft-fail true
 
   # ────────────────────────────────────────
   # Job 2: 앱 빌드 및 테스트
