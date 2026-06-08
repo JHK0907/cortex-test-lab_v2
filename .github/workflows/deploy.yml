@@ -10,15 +10,14 @@ on:
 # VULNERABLE: 시크릿 평문 노출 (Code Security 탐지 대상)
 # ────────────────────────────────────────────
 env:
-  # VULNERABLE: AWS Key 하드코딩 → Code Security 탐지 대상
-  AWS_ACCESS_KEY_ID: AKIAIOSFODNN7EXAMPLE
-  AWS_SECRET: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
-  DB_PASSWORD: SuperSecret1234!
-  APP_SECRET_KEY: my-super-secret-jwt-key-12345
+  CORTEX_API_KEY_ID: ${{ secrets.CORTEX_API_KEY_ID }}
+  CORTEX_API_BASE_URL: ${{ secrets.CORTEX_API_BASE_URL }}
+  CORTEX_API_KEY: ${{ secrets.CORTEX_API_KEY }}
+  DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
 
 jobs:
   # ────────────────────────────────────────
-  # Job 1: Code Security 스캔 (Cortex 연동)
+  # Job 1: Cortex Code Security Scan (CLI)
   # ────────────────────────────────────────
   code-scan:
     name: Cortex Code Security Scan
@@ -27,24 +26,29 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Checkov IaC 취약점 스캔 (Terraform)
-      - name: Run Checkov (IaC Security)
-        uses: bridgecrewio/checkov-action@master
-        with:
-          directory: terraform/
-          framework: terraform
-          output_format: cli
-          soft_fail: true  # 테스트용이므로 실패해도 계속 진행
+      - name: Download and Setup Cortex CLI
+        run: |
+          # Cortex CLI 다운로드 (Linux amd64)
+          # Note: 실제 URL은 테넌트 환경에 따라 다를 수 있으나, 표준 API 엔드포인트를 사용합니다.
+          curl -L "${{ env.CORTEX_API_BASE_URL }}/public_api/v1/unified-cli/releases/download-link?os=linux&architecture=amd64" \
+          -H "x-xdr-auth-id: ${{ env.CORTEX_API_KEY_ID }}" \
+          -o cortexcli.tar.gz
+          tar -xzf cortexcli.tar.gz
+          chmod +x ./cortexcli
 
-      # Trivy 컨테이너/파일 취약점 스캔
-      - name: Run Trivy (Secret & Vuln Scan)
-        uses: aquasecurity/trivy-action@master
-        with:
-          scan-type: fs
-          scan-ref: .
-          scanners: secret,vuln
-          format: table
-          exit-code: 0  # 테스트용이므로 실패해도 계속 진행
+      - name: Run Cortex Code Scan
+        run: |
+          ./cortexcli --api-base-url ${{ env.CORTEX_API_BASE_URL }} \
+                      --api-key ${{ env.CORTEX_API_KEY }} \
+                      --api-key-id ${{ env.CORTEX_API_KEY_ID }} \
+                      code scan --directory . --upload-mode upload --soft-fail true
+
+      - name: Run Cortex IaC Scan (Terraform)
+        run: |
+          ./cortexcli --api-base-url ${{ env.CORTEX_API_BASE_URL }} \
+                      --api-key ${{ env.CORTEX_API_KEY }} \
+                      --api-key-id ${{ env.CORTEX_API_KEY_ID }} \
+                      iac scan --directory terraform/ --upload-mode upload --soft-fail true
 
   # ────────────────────────────────────────
   # Job 2: 앱 빌드 및 테스트

@@ -1,0 +1,21 @@
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.backup
+.terraform.lock.hcl
+
+# SSH Keys
+terraform/test_key
+terraform/test_key.pub
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.env
+venv/
+.pytest_cache/
+
+# OS
+.DS_Store
+Thumbs.db
