@@ -168,34 +168,33 @@ jobs:
             SECRET_KEY=mysecretkey123
             ENV
 
-            # 5. 기존 앱 종료 및 재시작 (세션 분리 강화)
-            echo "🔄 Restarting Uvicorn..."
-            # [수정] pkill 패턴에 []를 사용하여 자기 자신(쉘)이 검색되는 것 방지
-            sudo pkill -f "[u]vicorn app.main" || true
-            sleep 2
-            
-            # [수정] 표준 입력(/dev/null)까지 완전히 분리하고 disown 실행
-            # 로그 파일 권한 확인 및 생성
-            touch /home/ubuntu/app/app.log
-            chmod 666 /home/ubuntu/app/app.log
+            # 5. systemd 서비스 파일 생성 및 앱 재시작
+            echo "⚙️ Setting up systemd service..."
+            sudo tee /etc/systemd/system/cortex-app.service << EOF
+            [Unit]
+            Description=Cortex Test FastAPI App
+            After=network.target
 
-            nohup ./venv/bin/uvicorn app.main:app \
-              --host 0.0.0.0 \
-              --port 8000 \
-              --workers 2 \
-              < /dev/null > /home/ubuntu/app/app.log 2>&1 &
-            
-            # 프로세스가 떴는지 잠시 확인
+            [Service]
+            User=ubuntu
+            Group=ubuntu
+            WorkingDirectory=/home/ubuntu/app
+            EnvironmentFile=/home/ubuntu/app/.env
+            ExecStart=/home/ubuntu/app/venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2
+            Restart=always
+
+            [Install]
+            WantedBy=multi-user.target
+            EOF
+
+            echo "🔄 Restarting Service..."
+            sudo systemctl daemon-reload
+            sudo systemctl enable cortex-app
+            sudo systemctl restart cortex-app
+
+            # 프로세스 상태 확인
             sleep 3
-            if pgrep -f "[u]vicorn app.main" > /dev/null; then
-              echo "🚀 Uvicorn started successfully in background (PID: $(pgrep -f "[u]vicorn app.main"))."
-            else
-              echo "❌ Failed to start Uvicorn. Check /home/ubuntu/app/app.log"
-              cat /home/ubuntu/app/app.log
-              exit 1
-            fi
-            
-            disown -a
+            sudo systemctl is-active --quiet cortex-app && echo "🚀 Service is running!" || (echo "❌ Service failed to start" && sudo journalctl -u cortex-app -n 20 && exit 1)
             
             # 6. Nginx 설정 업데이트
             echo "⚙️ Configuring Nginx..."
