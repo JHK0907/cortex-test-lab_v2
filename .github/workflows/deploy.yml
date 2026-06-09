@@ -120,11 +120,15 @@ jobs:
           host: ${{ env.EC2_HOST }}
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
-          timeout: 300s  # 타임아웃을 60s에서 300s로 연장
+          timeout: 60s
+          command_timeout: 10m  # 명령어 실행 타임아웃을 10분으로 명시
           script: |
             set -e
 
-            # 1. 시스템 패키지 체크 및 설치 (이미 있으면 스킵하여 속도 향상)
+            # 1. 시스템 패키지 락 대기 및 설치
+            echo "⌛ Waiting for apt lock..."
+            while sudo fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; do echo "Waiting for other apt process..."; sleep 5; done;
+            
             if ! dpkg -s libjpeg-dev >/dev/null 2>&1; then
               echo "📦 Installing system dependencies..."
               sudo apt-get update -y
@@ -145,7 +149,7 @@ jobs:
               cd /home/ubuntu/app
             fi
 
-            # 3. 가상환경 설정 및 의존성 설치 (Ubuntu 24.04 PEP 668 대응)
+            # 3. 가상환경 설정 및 의존성 설치
             if [ ! -d "venv" ]; then
               echo "Creating virtual environment..."
               python3 -m venv venv
@@ -155,7 +159,7 @@ jobs:
             ./venv/bin/pip install --upgrade pip
             ./venv/bin/pip install -r app/requirements.txt
 
-            # 3. 환경변수 파일 생성
+            # 4. 환경변수 파일 생성
             cat > .env << ENV
             DB_HOST=cortex-test-mysql.cx8ey4wgqdia.ap-northeast-2.rds.amazonaws.com
             DB_USER=admin
@@ -164,19 +168,19 @@ jobs:
             SECRET_KEY=mysecretkey123
             ENV
 
-            # 4. 기존 앱 종료 및 재시작
+            # 5. 기존 앱 종료 및 재시작 (세션 분리 강화)
             echo "🔄 Restarting Uvicorn..."
             pkill -f "uvicorn app.main" || true
             sleep 2
             
-            # 가상환경의 uvicorn을 사용하여 실행
+            # 가상환경의 uvicorn을 사용하여 실행 (출력 리다이렉션 및 백그라운드 완전 분리)
             nohup ./venv/bin/uvicorn app.main:app \
               --host 0.0.0.0 \
               --port 8000 \
               --workers 2 \
-              >> /home/ubuntu/app/app.log 2>&1 &
-
-            # 5. Nginx 설정 업데이트
+              > /home/ubuntu/app/app.log 2>&1 &
+            
+            # 6. Nginx 설정 업데이트
             echo "⚙️ Configuring Nginx..."
             sudo tee /etc/nginx/sites-available/cortex-test << 'NGINX'
             server {
