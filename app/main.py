@@ -4,6 +4,7 @@ Cortex Cloud ASPM/DSPM 테스트용 취약 FastAPI 앱
 """
 from fastapi import FastAPI, Request, Depends, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.templating import Jinja2Templates
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 import os, subprocess, json, hashlib
@@ -13,6 +14,9 @@ app = FastAPI(
     description="Intentionally vulnerable app for Cortex Cloud ASPM/DSPM testing",
     version="1.0.0"
 )
+
+# 템플릿 설정
+templates = Jinja2Templates(directory="app/templates")
 
 # ────────────────────────────────────────────
 # VULNERABLE: 시크릿 평문 하드코딩 → Code Security 탐지 대상
@@ -36,11 +40,19 @@ def get_db():
         yield conn
 
 # ────────────────────────────────────────────
-# Health check
+# Health check & Dashboard
 # ────────────────────────────────────────────
-@app.get("/")
-def root():
-    return {"status": "running", "app": "cortex-test-vulnerable-app"}
+@app.get("/", response_class=HTMLResponse)
+def root(request: Request):
+    """
+    개편된 보안 테스트 대시보드 렌더링
+    """
+    return templates.TemplateResponse("index.html", {
+        "request": request,
+        "db_host": DB_HOST,
+        "db_user": DB_USER,
+        "env_vars": dict(os.environ)
+    })
 
 @app.get("/health")
 def health():

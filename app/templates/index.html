@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cortex Security Test Lab</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        body { background-color: #0f172a; color: #e2e8f0; }
+        .card { background-color: #1e293b; border: 1px solid #334155; }
+        .vuln-badge { background-color: #ef4444; color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; }
+    </style>
+</head>
+<body class="min-h-screen">
+    <nav class="bg-slate-900 border-b border-slate-700 p-4 sticky top-0 z-50">
+        <div class="container mx-auto flex justify-between items-center">
+            <h1 class="text-2xl font-bold text-red-500"><i class="fas fa-shield-virus mr-2"></i>Cortex Security Lab</h1>
+            <div class="flex gap-4">
+                <span class="text-sm text-slate-400">Status: <span class="text-green-500">Live</span></span>
+                <span class="text-sm text-slate-400">Target: <span class="text-orange-400">Vulnerable Environment</span></span>
+            </div>
+        </div>
+    </nav>
+
+    <main class="container mx-auto p-6 grid grid-cols-1 md:grid-cols-3 gap-6">
+        <!-- Dashboard Header -->
+        <div class="col-span-full mb-4">
+            <h2 class="text-xl font-semibold mb-2">Security Dashboard Overview</h2>
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div class="card p-4 rounded-lg">
+                    <div class="text-slate-400 text-sm mb-1">Server Host</div>
+                    <div class="font-mono text-blue-400">{{ db_host }}</div>
+                </div>
+                <div class="card p-4 rounded-lg">
+                    <div class="text-slate-400 text-sm mb-1">DB User</div>
+                    <div class="font-mono text-green-400">{{ db_user }}</div>
+                </div>
+                <div class="card p-4 rounded-lg">
+                    <div class="text-slate-400 text-sm mb-1">AWS Access Key</div>
+                    <div class="font-mono text-red-400">AKIA...EXAM (Found in Code)</div>
+                </div>
+                <div class="card p-4 rounded-lg">
+                    <div class="text-slate-400 text-sm mb-1">Active Detections</div>
+                    <div class="font-bold text-red-500">High Risk</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Vulnerability Playground -->
+        <div class="col-span-1 md:col-span-2 space-y-6">
+            <h2 class="text-xl font-semibold"><i class="fas fa-flask mr-2"></i>Vulnerability Playground</h2>
+            
+            <!-- SQL Injection Card -->
+            <div class="card p-6 rounded-xl shadow-lg relative overflow-hidden">
+                <div class="vuln-badge absolute top-2 right-2">SQL Injection</div>
+                <h3 class="text-lg font-bold mb-4">Database Query Test</h3>
+                <p class="text-sm text-slate-400 mb-4">Enter User ID to retrieve profile details.</p>
+                <form action="/users" method="get" class="flex gap-2">
+                    <input type="text" name="id" placeholder="1 OR 1=1" class="flex-1 bg-slate-800 border border-slate-600 rounded p-2 text-white focus:outline-none focus:border-red-500">
+                    <button type="submit" class="bg-red-600 hover:bg-red-700 px-4 py-2 rounded font-bold transition">Execute</button>
+                </form>
+            </div>
+
+            <!-- Command Injection Card -->
+            <div class="card p-6 rounded-xl shadow-lg relative overflow-hidden">
+                <div class="vuln-badge absolute top-2 right-2">Command Injection</div>
+                <h3 class="text-lg font-bold mb-4">Network Diagnostic Tool</h3>
+                <p class="text-sm text-slate-400 mb-4">Enter host IP to check connectivity.</p>
+                <form action="/ping" method="get" class="flex gap-2">
+                    <input type="text" name="host" placeholder="127.0.0.1; ls -la" class="flex-1 bg-slate-800 border border-slate-600 rounded p-2 text-white focus:outline-none focus:border-red-500">
+                    <button type="submit" class="bg-red-600 hover:bg-red-700 px-4 py-2 rounded font-bold transition">Ping</button>
+                </form>
+            </div>
+
+            <!-- XSS Card -->
+            <div class="card p-6 rounded-xl shadow-lg relative overflow-hidden">
+                <div class="vuln-badge absolute top-2 right-2">Reflected XSS</div>
+                <h3 class="text-lg font-bold mb-4">Dynamic Greeting</h3>
+                <p class="text-sm text-slate-400 mb-4">Input your name for a personalized welcome.</p>
+                <form action="/greet" method="get" class="flex gap-2">
+                    <input type="text" name="name" placeholder="<script>alert(1)</script>" class="flex-1 bg-slate-800 border border-slate-600 rounded p-2 text-white focus:outline-none focus:border-red-500">
+                    <button type="submit" class="bg-red-600 hover:bg-red-700 px-4 py-2 rounded font-bold transition">Greet</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Sensitive Data Sidebar -->
+        <div class="col-span-1 space-y-6">
+            <h2 class="text-xl font-semibold"><i class="fas fa-database mr-2"></i>Data Assets</h2>
+            <div class="card p-6 rounded-xl border-l-4 border-red-500">
+                <h3 class="font-bold mb-2">DSPM Testing</h3>
+                <p class="text-sm text-slate-400 mb-4">Click below to export sensitive records including PII and credit card numbers.</p>
+                <a href="/data/export" target="_blank" class="block w-full bg-slate-700 hover:bg-slate-600 text-center py-3 rounded font-bold transition text-red-400">
+                    <i class="fas fa-file-export mr-2"></i>Export Sensitive Data
+                </a>
+            </div>
+
+            <div class="card p-6 rounded-xl">
+                <h3 class="font-bold mb-4 text-orange-400">Environment Info</h3>
+                <div class="text-xs font-mono space-y-2 max-h-48 overflow-y-auto bg-black p-3 rounded">
+                    {% for key, value in env_vars.items() %}
+                    <div class="mb-1"><span class="text-blue-400">{{ key }}:</span> <span class="text-slate-300 break-all">{{ value }}</span></div>
+                    {% endfor %}
+                </div>
+                <div class="mt-4">
+                    <a href="/health" class="text-sm text-blue-500 hover:underline">Full Health Report &rarr;</a>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer class="mt-12 p-8 border-t border-slate-700 text-center text-slate-500 text-sm">
+        <p>&copy; 2026 Cortex Security Lab - Intentionally Vulnerable Application</p>
+        <p class="mt-2 font-mono text-xs">This application is for security testing purposes only.</p>
+    </footer>
+</body>
+</html>
