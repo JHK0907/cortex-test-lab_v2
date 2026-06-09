@@ -120,13 +120,16 @@ jobs:
           host: ${{ env.EC2_HOST }}
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
-          timeout: 60s
+          timeout: 300s  # 타임아웃을 60s에서 300s로 연장
           script: |
             set -e
 
-            # 1. 시스템 패키지 업데이트 및 필수 라이브러리 설치 (Pillow 등 컴파일용)
-            sudo apt-get update -y
-            sudo apt-get install -y libjpeg-dev zlib1g-dev build-essential python3-dev
+            # 1. 시스템 패키지 체크 및 설치 (이미 있으면 스킵하여 속도 향상)
+            if ! dpkg -s libjpeg-dev >/dev/null 2>&1; then
+              echo "📦 Installing system dependencies..."
+              sudo apt-get update -y
+              sudo apt-get install -y libjpeg-dev zlib1g-dev build-essential python3-dev
+            fi
 
             # 2. 앱 디렉토리 및 소스 업데이트
             mkdir -p /home/ubuntu/app
