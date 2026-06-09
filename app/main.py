@@ -70,106 +70,78 @@ def health():
 # ────────────────────────────────────────────
 # VULNERABLE: SQL Injection → ASPM 탐지 대상
 # ────────────────────────────────────────────
-@app.get("/users")
-def get_user(id: str, db: Session = Depends(get_db)):
+@app.get("/users", response_class=HTMLResponse)
+def get_user(request: Request, id: str, db: Session = Depends(get_db)):
     """
     VULNERABLE: SQL Injection
-    예시 공격: /users?id=1 OR 1=1
     """
-    # VULNERABLE: 입력값을 직접 쿼리에 삽입 (parameterized query 미사용)
     query = f"SELECT * FROM users WHERE id = {id}"
+    success = False
+    data = None
+    
     try:
         result = db.execute(text(query))
         rows = [dict(row._mapping) for row in result]
-        return {"users": rows}
+        data = {"users": rows}
+        success = len(rows) > 0
     except Exception as e:
-        return {"error": str(e), "query": query}  # VULNERABLE: 쿼리 노출
+        data = {"error": str(e), "query": query}
+        success = False
 
-@app.get("/search")
-def search_users(name: str, db: Session = Depends(get_db)):
-    """
-    VULNERABLE: SQL Injection (LIKE 절)
-    예시 공격: /search?name=' OR '1'='1
-    """
-    query = f"SELECT id, name, email FROM users WHERE name LIKE '%{name}%'"
-    try:
-        result = db.execute(text(query))
-        return {"results": [dict(row._mapping) for row in result]}
-    except Exception as e:
-        return {"error": str(e)}
+    return templates.TemplateResponse("result.html", {
+        "request": request,
+        "attack_type": "SQL Injection",
+        "success": success,
+        "payload": id,
+        "data": data
+    })
 
 # ────────────────────────────────────────────
 # VULNERABLE: XSS → ASPM 탐지 대상
 # ────────────────────────────────────────────
 @app.get("/greet", response_class=HTMLResponse)
-def greet(name: str = "Guest"):
+def greet(request: Request, name: str = "Guest"):
     """
     VULNERABLE: Reflected XSS
-    예시 공격: /greet?name=<script>alert('xss')</script>
     """
-    # VULNERABLE: 입력값을 HTML에 직접 삽입 (이스케이프 없음)
-    html = f"""
-    <html>
-      <body>
-        <h1>Hello, {name}!</h1>
-        <p>Welcome to the test application.</p>
-      </body>
-    </html>
-    """
-    return HTMLResponse(content=html)
-
-# ────────────────────────────────────────────
-# VULNERABLE: 인증 없는 관리자 엔드포인트 → ASPM 탐지 대상
-# ────────────────────────────────────────────
-@app.get("/admin")
-def admin_panel(db: Session = Depends(get_db)):
-    """
-    VULNERABLE: 인증 없이 관리자 데이터 접근 가능
-    """
-    try:
-        users = db.execute(text("SELECT * FROM users")).fetchall()
-        cards = db.execute(text("SELECT * FROM credit_cards")).fetchall()
-        return {
-            "message": "Admin panel - no auth required!",
-            "total_users": len(users),
-            "all_users": [dict(r._mapping) for r in users],
-            "credit_cards": [dict(r._mapping) for r in cards],  # 카드 정보 노출
-        }
-    except Exception as e:
-        return {"error": str(e)}
-
-@app.delete("/admin/users/{user_id}")
-def delete_user(user_id: int, db: Session = Depends(get_db)):
-    """
-    VULNERABLE: 인증 없이 사용자 삭제 가능
-    """
-    db.execute(text(f"DELETE FROM users WHERE id = {user_id}"))
-    db.commit()
-    return {"message": f"User {user_id} deleted (no auth required)"}
+    return templates.TemplateResponse("result.html", {
+        "request": request,
+        "attack_type": "Reflected XSS",
+        "success": "<script>" in name.lower(),
+        "payload": name,
+        "data": {"rendered_html": f"<h1>Hello, {name}!</h1>"}
+    })
 
 # ────────────────────────────────────────────
 # VULNERABLE: Command Injection → ASPM 탐지 대상
 # ────────────────────────────────────────────
-@app.get("/ping")
-def ping_host(host: str):
+@app.get("/ping", response_class=HTMLResponse)
+def ping_host(request: Request, host: str):
     """
     VULNERABLE: OS Command Injection
-    예시 공격: /ping?host=127.0.0.1; cat /etc/passwd
     """
-    # VULNERABLE: 사용자 입력을 shell 명령에 직접 삽입
     result = subprocess.run(
         f"ping -c 1 {host}",
-        shell=True,  # VULNERABLE: shell=True 사용
+        shell=True,
         capture_output=True,
         text=True,
         timeout=5
     )
-    return {
-        "host": host,
+    
+    success = result.returncode == 0 or len(result.stdout) > 0
+    data = {
         "stdout": result.stdout,
         "stderr": result.stderr,
         "returncode": result.returncode
     }
+
+    return templates.TemplateResponse("result.html", {
+        "request": request,
+        "attack_type": "Command Injection",
+        "success": success,
+        "payload": host,
+        "data": data
+    })
 
 # ────────────────────────────────────────────
 # VULNERABLE: IDOR (Insecure Direct Object Reference)
