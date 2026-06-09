@@ -138,8 +138,15 @@ jobs:
               cd /home/ubuntu/app
             fi
 
-            # 2. Python 의존성 설치
-            pip3 install -r app/requirements.txt
+            # 2. 가상환경 설정 및 의존성 설치 (Ubuntu 24.04 PEP 668 대응)
+            if [ ! -d "venv" ]; then
+              echo "Creating virtual environment..."
+              python3 -m venv venv
+            fi
+            
+            echo "Installing dependencies..."
+            ./venv/bin/pip install --upgrade pip
+            ./venv/bin/pip install -r app/requirements.txt
 
             # 3. 환경변수 파일 생성
             cat > .env << ENV
@@ -154,7 +161,9 @@ jobs:
             echo "🔄 Restarting Uvicorn..."
             pkill -f "uvicorn app.main" || true
             sleep 2
-            nohup uvicorn app.main:app \
+            
+            # 가상환경의 uvicorn을 사용하여 실행
+            nohup ./venv/bin/uvicorn app.main:app \
               --host 0.0.0.0 \
               --port 8000 \
               --workers 2 \
