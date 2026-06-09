@@ -6,10 +6,10 @@ on:
   pull_request:
     branches: [main]
 
-# ────────────────────────────────────────────
-# VULNERABLE: 시크릿 평문 노출 (Code Security 탐지 대상)
-# ────────────────────────────────────────────
 env:
+  # 배포 대상 서버 IP
+  EC2_HOST: "43.203.59.65"
+  # Cortex & DB 설정
   CORTEX_API_KEY_ID: ${{ secrets.CORTEX_API_KEY_ID }}
   CORTEX_API_BASE_URL: ${{ secrets.CORTEX_API_BASE_URL }}
   CORTEX_API_KEY: ${{ secrets.CORTEX_API_KEY }}
@@ -28,10 +28,7 @@ jobs:
 
       - name: Install dependencies and Cortex CLI
         run: |
-          # 필수 라이브러리 설치
           sudo apt-get update && sudo apt-get install -y libhyperscan5
-
-          # Homebrew를 통한 Cortex CLI 설치 (권장 방식)
           /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
           (echo; echo 'eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"') >> /home/runner/.bashrc
           eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
@@ -41,16 +38,13 @@ jobs:
       - name: Run Cortex Security Scans
         run: |
           eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
-          
-          # Repo ID 설정 (예: owner/repo)
           REPO_ID="${{ github.repository }}"
 
           echo "🚀 Running Cortex Code Scan..."
-          # 라이선스 미보유 시 에러가 발생하므로 || echo로 무시하고 진행
           cortexcli --api-key "${{ secrets.CORTEX_API_KEY }}" \
                     --api-key-id "${{ secrets.CORTEX_API_KEY_ID }}" \
                     --api-base-url "${{ secrets.CORTEX_API_BASE_URL }}" \
-                    code scan --directory . --repo-id "$REPO_ID" --upload-mode upload --soft-fail true || echo "⚠️ Code Scan failed (Check License or Auth Level)"
+                    code scan --directory . --repo-id "$REPO_ID" --upload-mode upload --soft-fail true || echo "⚠️ Code Scan failed"
 
           echo "🚀 Running Cortex IaC Scan..."
           cortexcli --api-key "${{ secrets.CORTEX_API_KEY }}" \
@@ -104,33 +98,51 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # SSH로 EC2에 직접 배포
-      - name: Deploy via SSH
+      # [개선] SSH 접속 전 포트 열림 확인 (i/o timeout 방지)
+      - name: Wait for SSH connectivity
+        run: |
+          echo "🔍 Checking SSH connectivity to ${{ env.EC2_HOST }}..."
+          for i in {1..10}; do
+            if nc -zv -w 5 ${{ env.EC2_HOST }} 22; then
+              echo "✅ SSH port is open!"
+              exit 0
+            fi
+            echo "⏳ Waiting for SSH (attempt $i/10)..."
+            sleep 10
+          done
+          echo "❌ SSH port is still closed after 100 seconds."
+          exit 1
+
+      # [개선] 배포 및 Nginx 설정을 하나의 SSH 세션으로 통합
+      - name: Deploy and Configure Server
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: 43.203.59.65
+          host: ${{ env.EC2_HOST }}
           username: ubuntu
           key: ${{ secrets.EC2_SSH_KEY }}
           timeout: 60s
           script: |
             set -e
 
-            # 앱 디렉토리 준비
+            # 1. 앱 디렉토리 및 소스 업데이트
             mkdir -p /home/ubuntu/app
-            cd /home/ubuntu/app
-
-            # Git pull (이미 클론된 경우)
-            if [ -d ".git" ]; then
+            
+            if [ -d "/home/ubuntu/app/.git" ]; then
+              echo "🔄 Pulling latest changes..."
+              cd /home/ubuntu/app
               git pull origin main
             else
-              git clone https://github.com/${{ github.repository }} .
+              echo "🚀 Cloning repository..."
+              rm -rf /home/ubuntu/app
+              git clone https://github.com/${{ github.repository }} /home/ubuntu/app
+              cd /home/ubuntu/app
             fi
 
-            # Python 의존성 설치
+            # 2. Python 의존성 설치
             pip3 install -r app/requirements.txt
 
-            # 환경변수 파일 생성
-            cat > /home/ubuntu/app/.env << 'ENV'
+            # 3. 환경변수 파일 생성
+            cat > .env << ENV
             DB_HOST=cortex-test-mysql.cx8ey4wgqdia.ap-northeast-2.rds.amazonaws.com
             DB_USER=admin
             DB_PASSWORD=${{ secrets.DB_PASSWORD }}
@@ -138,27 +150,18 @@ jobs:
             SECRET_KEY=mysecretkey123
             ENV
 
-            # 기존 프로세스 종료 후 재시작
+            # 4. 기존 앱 종료 및 재시작
+            echo "🔄 Restarting Uvicorn..."
             pkill -f "uvicorn app.main" || true
             sleep 2
-
-            # Uvicorn으로 앱 실행 (백그라운드)
             nohup uvicorn app.main:app \
               --host 0.0.0.0 \
               --port 8000 \
               --workers 2 \
               >> /home/ubuntu/app/app.log 2>&1 &
 
-            echo "✅ 배포 완료 — PID: $!"
-
-      # Nginx 설정 업데이트
-      - name: Configure Nginx
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: 43.203.59.65
-          username: ubuntu
-          key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
+            # 5. Nginx 설정 업데이트
+            echo "⚙️ Configuring Nginx..."
             sudo tee /etc/nginx/sites-available/cortex-test << 'NGINX'
             server {
                 listen 80;
@@ -173,11 +176,11 @@ jobs:
             }
             NGINX
 
-            sudo ln -sf /etc/nginx/sites-available/cortex-test \
-                        /etc/nginx/sites-enabled/cortex-test
+            sudo ln -sf /etc/nginx/sites-available/cortex-test /etc/nginx/sites-enabled/cortex-test
             sudo rm -f /etc/nginx/sites-enabled/default
             sudo nginx -t && sudo systemctl reload nginx
-            echo "✅ Nginx 설정 완료"
+
+            echo "✅ Deployment Successful!"
 
   # ────────────────────────────────────────
   # Job 4: 배포 후 헬스체크
@@ -193,20 +196,17 @@ jobs:
 
       - name: Health check
         run: |
-          EC2_HOST="43.203.59.65"
-          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://${EC2_HOST}/health || echo "000")
-
+          RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://${{ env.EC2_HOST }}/health || echo "000")
           if [ "$RESPONSE" = "200" ]; then
             echo "✅ 헬스체크 통과 (HTTP $RESPONSE)"
           else
-            echo "⚠️  헬스체크 응답: HTTP $RESPONSE (앱이 아직 시작 중일 수 있음)"
+            echo "⚠️  헬스체크 응답: HTTP $RESPONSE"
           fi
 
-      - name: Verify vulnerable endpoints exist
+      - name: Verify endpoints
         run: |
-          EC2_HOST="43.203.59.65"
-          echo "📋 ASPM 테스트 엔드포인트 확인:"
+          echo "📋 엔드포인트 확인:"
           for endpoint in "/" "/health" "/admin" "/docs"; do
-            CODE=$(curl -s -o /dev/null -w "%{http_code}" http://${EC2_HOST}${endpoint} || echo "000")
+            CODE=$(curl -s -o /dev/null -w "%{http_code}" http://${{ env.EC2_HOST }}${endpoint} || echo "000")
             echo "  ${endpoint}: HTTP ${CODE}"
           done
