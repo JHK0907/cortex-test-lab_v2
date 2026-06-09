@@ -170,18 +170,32 @@ jobs:
 
             # 5. 기존 앱 종료 및 재시작 (세션 분리 강화)
             echo "🔄 Restarting Uvicorn..."
-            sudo pkill -f "uvicorn app.main" || true
+            # [수정] pkill 패턴에 []를 사용하여 자기 자신(쉘)이 검색되는 것 방지
+            sudo pkill -f "[u]vicorn app.main" || true
             sleep 2
             
             # [수정] 표준 입력(/dev/null)까지 완전히 분리하고 disown 실행
+            # 로그 파일 권한 확인 및 생성
+            touch /home/ubuntu/app/app.log
+            chmod 666 /home/ubuntu/app/app.log
+
             nohup ./venv/bin/uvicorn app.main:app \
               --host 0.0.0.0 \
               --port 8000 \
               --workers 2 \
               < /dev/null > /home/ubuntu/app/app.log 2>&1 &
             
+            # 프로세스가 떴는지 잠시 확인
+            sleep 3
+            if pgrep -f "[u]vicorn app.main" > /dev/null; then
+              echo "🚀 Uvicorn started successfully in background (PID: $(pgrep -f "[u]vicorn app.main"))."
+            else
+              echo "❌ Failed to start Uvicorn. Check /home/ubuntu/app/app.log"
+              cat /home/ubuntu/app/app.log
+              exit 1
+            fi
+            
             disown -a
-            echo "🚀 Uvicorn started in background."
             
             # 6. Nginx 설정 업데이트
             echo "⚙️ Configuring Nginx..."
